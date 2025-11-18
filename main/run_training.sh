@@ -5,15 +5,8 @@ set -e
 # USER CONFIGURATION
 ###############################################
 
-# List of datasets
-DATASETS=(
-    "AmpHGT"
-    "CellPPD"
-    "MHC"
-    "THPep"
-)
+DATASETS=("AmpHGT" "CellPPD" "MHC" "THPep")
 
-# List of model names
 MODELS=(
     "aaronfeller/PeptideMTR_sm"
     "aaronfeller/PeptideMTR_base"
@@ -26,98 +19,119 @@ MODELS=(
     "aaronfeller/PeptideMLM-MTR_lg"
 )
 
-# List of GPU IDs available
 GPUS=(0 1 2 3 4 5 6 7)
 
-# Path to training script
 TRAIN_SCRIPT="scripts/train_model.py"
 
-# Output log directory
 LOG_DIR="logs/launcher"
 mkdir -p "$LOG_DIR"
 
 ###############################################
-# JOB QUEUE LOGIC
+# GPU MEMORY CHECK
 ###############################################
 
-# Track PIDs per GPU
-declare -A GPU_PIDS
+# Free memory (MB) for GPU index
+get_gpu_free_mem() {
+    nvidia-smi --query-gpu=memory.free --format=csv,noheader,nounits \
+        | sed -n "$((1 + $1))p"
+}
 
-function wait_for_free_gpu() {
-    while true; do
-        for GPU in "${GPUS[@]}"; do
-            PID=${GPU_PIDS[$GPU]}
+# Return list of GPUs with >70GB free
+find_free_gpus() {
+    local threshold=70000
+    local free
+    local candidates=()
 
-            # GPU is free if no process OR process finished
-            if [[ -z "$PID" ]] || ! ps -p "$PID" > /dev/null 2>&1; then
-                echo "$GPU"
-                return
-            fi
-        done
-
-        echo "[INFO] All GPUs busy — waiting 10 seconds..."
-        sleep 10
+    for gpu in "${GPUS[@]}"; do
+        free=$(get_gpu_free_mem $gpu)
+        if [[ "$free" =~ ^[0-9]+$ ]] && (( free > threshold )); then
+            candidates+=("$gpu")
+        fi
     done
+
+    echo "${candidates[@]}"
 }
 
 ###############################################
-# JOB LAUNCH
+# BUILD JOB QUEUE (WITH SKIPS)
 ###############################################
 
-JOB_ID=0
+declare -a JOB_DATASETS
+declare -a JOB_MODELS
 
 for DATASET in "${DATASETS[@]}"; do
     for MODEL in "${MODELS[@]}"; do
         
-        # if [[ "$MODEL" == *"_sm"* && "$DATASET" == "AmpHGT" ]]; then
-        #     echo "[SKIP] Skipping already done: Dataset=$DATASET Model=$MODEL"
-        #     continue
-        # fi
+        # Skip already-completed AmpHGT runs
+        if [[ "$DATASET" == "AmpHGT" && ("$MODEL" == *"_sm"* || "$MODEL" == *"_base"*) ]]; then
+            echo "[SKIP] Already completed: $DATASET $MODEL"
+            continue
+        fi
 
-        # if [[ "$MODEL" == *"_base"* && "$DATASET" == "AmpHGT" ]]; then
-        #     echo "[SKIP] Skipping already done: Dataset=$DATASET Model=$MODEL"
-        #     continue
-        # fi
+        if [[ "$DATASET" == "CellPPD" && "$MODEL" == *"MLM-MTR_sm"* ]]; then
+            echo "[SKIP] Already completed: $DATASET $MODEL"
+            continue
+        fi
 
-        GPU=$(wait_for_free_gpu)
+        JOB_DATASETS+=("$DATASET")
+        JOB_MODELS+=("$MODEL")
+    done
+done
+
+TOTAL_JOBS=${#JOB_DATASETS[@]}
+echo "[INFO] Total jobs to run: $TOTAL_JOBS"
+
+###############################################
+# MAIN LOOP — FILL ALL FREE GPUS, WAIT 60s, REPEAT
+###############################################
+
+JOB_ID=0
+
+echo "[INFO] Entering scheduling loop..."
+
+while (( JOB_ID < TOTAL_JOBS )); do
+
+    # Get all currently free GPUs
+    FREE_GPUS=( $(find_free_gpus) )
+
+    if (( ${#FREE_GPUS[@]} == 0 )); then
+        echo "[INFO] No GPUs with >70GB free — sleeping 60s..."
+        sleep 60
+        continue
+    fi
+
+    echo "[INFO] Free GPUs: ${FREE_GPUS[*]}"
+
+    # Launch one job per free GPU (or until we run out of jobs)
+    for gpu in "${FREE_GPUS[@]}"; do
+        if (( JOB_ID >= TOTAL_JOBS )); then
+            break
+        fi
+
+        DATASET=${JOB_DATASETS[$JOB_ID]}
+        MODEL=${JOB_MODELS[$JOB_ID]}
+
         LOG_FILE="${LOG_DIR}/job_${JOB_ID}_${DATASET}/${MODEL//\//_}.log"
-
         mkdir -p "$(dirname "$LOG_FILE")"
 
-        echo "[LAUNCH] Job $JOB_ID: Dataset=$DATASET Model=$MODEL --> GPU=$GPU"
+        echo "[LAUNCH] Job $JOB_ID: $DATASET $MODEL on GPU $gpu"
         echo "  Log: $LOG_FILE"
 
-        CUDA_VISIBLE_DEVICES=$GPU \
+        CUDA_VISIBLE_DEVICES=$gpu \
         python "$TRAIN_SCRIPT" \
             --dataset "$DATASET" \
             --gpu 0 \
             --model_name "$MODEL" \
             > "$LOG_FILE" 2>&1 &
 
-        # Store PID for GPU tracking
-        GPU_PIDS[$GPU]=$!
-
         JOB_ID=$((JOB_ID + 1))
-
-        # short safety delay
         sleep 2
     done
+
+    echo "[INFO] Sleeping 60s before next GPU scan..."
+    sleep 60
 done
 
 echo "========================================="
-echo "All jobs submitted. Monitoring queue..."
-echo "========================================="
-
-# Wait for all GPUs to finish
-for GPU in "${GPUS[@]}"; do
-    PID=${GPU_PIDS[$GPU]}
-    if [[ -n "$PID" ]]; then
-        echo "Waiting for GPU $GPU (PID $PID)..."
-        wait "$PID"
-        echo "GPU $GPU is done."
-    fi
-done
-
-echo "========================================="
-echo "All training runs completed."
+echo "All jobs launched."
 echo "========================================="
