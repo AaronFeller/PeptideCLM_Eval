@@ -1,4 +1,4 @@
-Quantitative measurement,Qualitative Measurement,token_list,smiles
+label,Qualitative Measurement,token_list,smiles
 44.0,Positive,"['V', 'L', 'H', 'D', 'D', 'L', 'SCM_C', 'E', 'A']",CC(C)CC(NC(=O)[C@H](CC(C)C)NC(=O)[C@H](CC(=O)O)NC(=O)[C@H](CC(=O)O)NC(=O)[C@H](Cc1c[nH]cn1)NC(=O)[C@H](CC(C)C)NC(=O)[C@@H](N)C(C)C)C(=O)N[C@@H](CCC(=O)O)C(=O)N[C@@H](C)C(=O)O
 15.0,Positive,"['V', 'L', 'F', 'D', 'D', 'L', 'SCM_C', 'E', 'A']",CC(C)CC(NC(=O)[C@H](CC(C)C)NC(=O)[C@H](CC(=O)O)NC(=O)[C@H](CC(=O)O)NC(=O)[C@H](Cc1ccccc1)NC(=O)[C@H](CC(C)C)NC(=O)[C@@H](N)C(C)C)C(=O)N[C@@H](CCC(=O)O)C(=O)N[C@@H](C)C(=O)O
 44.0,Positive,"['V', 'L', 'CITR_R', 'D', 'D', 'L', 'C', 'E', 'A']",CC(C)C[C@H](NC(=O)[C@H](CC(=O)O)NC(=O)[C@H](CC(=O)O)NC(=O)[C@H](CCCNC(N)=O)NC(=O)[C@H](CC(C)C)NC(=O)[C@@H](N)C(C)C)C(=O)N[C@@H](CS)C(=O)N[C@@H](CCC(=O)O)C(=O)N[C@@H](C)C(=O)O

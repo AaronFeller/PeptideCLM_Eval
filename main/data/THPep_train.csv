@@ -1,4 +1,4 @@
-ID,Sequence,SMILES,Class
+ID,Sequence,smiles,label
 pos-pep1,AAEWLDAFFVRHVDR,CC(C)C[C@H](NC(=O)[C@H](Cc1c[nH]c2ccccc12)NC(=O)[C@H](CCC(=O)O)NC(=O)[C@H](C)NC(=O)[C@H](C)N)C(=O)N[C@@H](CC(=O)O)C(=O)N[C@@H](C)C(=O)N[C@@H](Cc1ccccc1)C(=O)N[C@@H](Cc1ccccc1)C(=O)N[C@H](C(=O)N[C@@H](CCCNC(=N)N)C(=O)N[C@@H](Cc1c[nH]cn1)C(=O)N[C@H](C(=O)N[C@@H](CC(=O)O)C(=O)N[C@@H](CCCNC(=N)N)C(=O)O)C(C)C)C(C)C,1
 pos-pep3,ADGAPRPGAPLA,CC(C)C[C@H](NC(=O)[C@@H]1CCCN1C(=O)[C@H](C)NC(=O)CNC(=O)[C@@H]1CCCN1C(=O)[C@H](CCCNC(=N)N)NC(=O)[C@@H]1CCCN1C(=O)[C@H](C)NC(=O)CNC(=O)[C@H](CC(=O)O)NC(=O)[C@H](C)N)C(=O)N[C@@H](C)C(=O)O,1
 pos-pep4,AEGEFGHWCDQHWLQYWYEGDPAK,CC(C)C[C@H](NC(=O)[C@H](Cc1c[nH]c2ccccc12)NC(=O)[C@H](Cc1c[nH]cn1)NC(=O)[C@H](CCC(N)=O)NC(=O)[C@H](CC(=O)O)NC(=O)[C@H](CS)NC(=O)[C@H](Cc1c[nH]c2ccccc12)NC(=O)[C@H](Cc1c[nH]cn1)NC(=O)CNC(=O)[C@H](Cc1ccccc1)NC(=O)[C@H](CCC(=O)O)NC(=O)CNC(=O)[C@H](CCC(=O)O)NC(=O)[C@H](C)N)C(=O)N[C@@H](CCC(N)=O)C(=O)N[C@@H](Cc1ccc(O)cc1)C(=O)N[C@@H](Cc1c[nH]c2ccccc12)C(=O)N[C@@H](Cc1ccc(O)cc1)C(=O)N[C@@H](CCC(=O)O)C(=O)NCC(=O)N[C@@H](CC(=O)O)C(=O)N1CCC[C@H]1C(=O)N[C@@H](C)C(=O)N[C@@H](CCCCN)C(=O)O,1
