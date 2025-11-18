@@ -158,7 +158,11 @@ def train_model(train_smiles, train_labels, val_smiles, val_labels, target,
 
     # Load the best version
     best_path = checkpoint_cb.best_model_path
-    model = model.load_from_checkpoint(best_path)
+    model = PeptideModel.load_from_checkpoint(best_path,
+                                              model_name=model_name,
+                                              learning_rate=learning_rate,
+                                              target=target,
+                                              tokenizer=tokenizer)
 
     return model
 
