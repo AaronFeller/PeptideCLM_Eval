@@ -12,7 +12,7 @@ from torch.nn.utils.rnn import pad_sequence
 
 import pandas as pd
 import numpy as np
-from sklearn.model_selection import StratifiedKFold
+from sklearn.model_selection import KFold
 
 
 ###############################################
@@ -249,17 +249,13 @@ if __name__ == "__main__":
         os.makedirs("results", exist_ok=True)
         out.to_csv(f"results/{dataset}_{model_name.split('/')[-1]}_results.csv", index=False)
 
-    elif val_df is not None and test_df is None:
+    else:
         # fallback to 5-fold CV
-        skf = StratifiedKFold(n_splits=5, shuffle=True)
-
-        bins = pd.qcut(train_df["label"], q=5, labels=False, duplicates="drop") \
-               if task == "regression" \
-               else train_df["label"]
+        kf = KFold(n_splits=5, shuffle=True)
 
         all_results = []
 
-        for fold, (train_idx, val_idx) in enumerate(skf.split(train_df, bins)):
+        for fold, (train_idx, val_idx) in enumerate(kf.split(train_df)):
             tr = train_df.iloc[train_idx]
             va = train_df.iloc[val_idx]
 
@@ -267,7 +263,20 @@ if __name__ == "__main__":
                                 va["smiles"], va["label"],
                                 task, model_name, gpu)
 
-            preds = evaluate_on_test_set(model, va["smiles"], va["label"], model_name)
+            if test_df is not None:
+                preds = evaluate_on_test_set(model, test_df["smiles"], test_df["label"], model_name)
+
+                df = pd.DataFrame({
+                    "smiles": test_df["smiles"],
+                    "true_label": test_df["label"],
+                    "predicted_label": preds,
+                    "fold": fold,
+                })
+                all_results.append(df)
+                continue
+            elif test_df is None:
+                # evaluate on created val set
+                preds = evaluate_on_test_set(model, va["smiles"], va["label"], model_name)
 
             df = pd.DataFrame({
                 "smiles": va["smiles"],

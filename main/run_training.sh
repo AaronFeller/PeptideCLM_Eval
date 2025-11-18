@@ -80,7 +80,9 @@ for DATASET in "${DATASETS[@]}"; do
         # fi
 
         GPU=$(wait_for_free_gpu)
-        LOG_FILE="${LOG_DIR}/job_${JOB_ID}_${DATASET}_${MODEL//\//_}.log"
+        LOG_FILE="${LOG_DIR}/job_${JOB_ID}_${DATASET}/${MODEL//\//_}.log"
+
+        mkdir -p "$(dirname "$LOG_FILE")"
 
         echo "[LAUNCH] Job $JOB_ID: Dataset=$DATASET Model=$MODEL --> GPU=$GPU"
         echo "  Log: $LOG_FILE"
