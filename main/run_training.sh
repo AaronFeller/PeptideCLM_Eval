@@ -5,7 +5,8 @@ set -e
 # USER CONFIGURATION
 ###############################################
 
-DATASETS=("AmpHGT" "CellPPD" "MHC" "THPep")
+# DATASETS=("AmpHGT" "CellPPD" "MHC" "THPep")
+DATASETS=("MHC")
 
 MODELS=(
     "aaronfeller/PeptideMTR_sm"

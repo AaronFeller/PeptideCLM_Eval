@@ -290,8 +290,8 @@ if __name__ == "__main__":
             "predicted_label": preds,
         })
 
-        os.makedirs("results", exist_ok=True)
-        out.to_csv(f"results/{dataset}_{model_name.split('/')[-1]}_results.csv", index=False)
+        os.makedirs("results2", exist_ok=True)
+        out.to_csv(f"results2/{dataset}_{model_name.split('/')[-1]}_results.csv", index=False)
 
     else:
         # fallback to 5-fold CV
@@ -331,6 +331,6 @@ if __name__ == "__main__":
             all_results.append(df)
 
         final = pd.concat(all_results)
-        os.makedirs("results", exist_ok=True)
-        final.to_csv(f"results/{dataset}_{model_name.split('/')[-1]}_results.csv", index=False)
+        os.makedirs("results2", exist_ok=True)
+        final.to_csv(f"results2/{dataset}_{model_name.split('/')[-1]}_results.csv", index=False)
 
