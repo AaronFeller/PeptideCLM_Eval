@@ -14,47 +14,69 @@ import pandas as pd
 import numpy as np
 from sklearn.model_selection import KFold
 
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
+os.environ["OMP_NUM_THREADS"] = "1"
+os.environ["MKL_NUM_THREADS"] = "1"
+os.environ["NUMEXPR_NUM_THREADS"] = "1"
+
 
 ###############################################
 # DATASET + COLLATE
 ###############################################
 
-def collate_fn(batch):
-    input_ids = [x["input_ids"] for x in batch]
-    masks = [x["attention_mask"] for x in batch]
-    labels = torch.tensor([x["label"] for x in batch], dtype=torch.float32)
-
-    padded_ids = pad_sequence(input_ids, batch_first=True, padding_value=tokenizer.pad_token_id)
-    padded_masks = pad_sequence(masks, batch_first=True, padding_value=0)
-
-    return {
-        "input_ids": padded_ids,
-        "attention_mask": padded_masks,
-        "labels": labels,
-    }
-
-
 class MoleculeDataset(Dataset):
-    def __init__(self, smiles_list, labels, tokenizer):
-        self.smiles = list(smiles_list)
-        self.labels = list(labels)
-        self.tokenizer = tokenizer
+    """
+    Pre-tokenize everything once in __init__, so __getitem__ is O(1)
+    and doesn't spawn threads or touch HF internals.
+    """
+    def __init__(self, smiles_list, labels, tokenizer, max_length=None):
+        smiles_list = list(smiles_list)
+        labels = list(labels)
+
+        # Batch tokenization: one call instead of per-sample
+        encodings = tokenizer(
+            smiles_list,
+            truncation=True,
+            padding="longest",
+            max_length=max_length,
+            add_special_tokens=True,
+        )
+
+        self.input_ids = [
+            torch.tensor(x, dtype=torch.long) for x in encodings["input_ids"]
+        ]
+        self.attention_masks = [
+            torch.tensor(x, dtype=torch.long) for x in encodings["attention_mask"]
+        ]
+        self.labels = torch.tensor(labels, dtype=torch.float32)
 
     def __len__(self):
-        return len(self.smiles)
+        return len(self.labels)
 
     def __getitem__(self, idx):
-        enc = self.tokenizer(
-            self.smiles[idx],
-            truncation=True,
-            return_tensors="pt"
-        )
         return {
-            "input_ids": enc["input_ids"].squeeze(0),
-            "attention_mask": enc["attention_mask"].squeeze(0),
-            "label": torch.tensor(self.labels[idx], dtype=torch.float32),
+            "input_ids": self.input_ids[idx],
+            "attention_mask": self.attention_masks[idx],
+            "label": self.labels[idx],
         }
 
+
+def make_collate_fn(pad_token_id: int):
+    def collate_fn(batch):
+        input_ids = [x["input_ids"] for x in batch]
+        masks = [x["attention_mask"] for x in batch]
+        labels = torch.stack([x["label"] for x in batch])
+
+        padded_ids = pad_sequence(input_ids, batch_first=True, padding_value=pad_token_id)
+        padded_masks = pad_sequence(masks, batch_first=True, padding_value=0)
+
+        return {
+            "input_ids": padded_ids,
+            "attention_mask": padded_masks,
+            "labels": labels,
+        }
+
+    return collate_fn
 
 ###############################################
 # MODEL
@@ -118,19 +140,37 @@ class PeptideModel(pl.LightningModule):
 def train_model(train_smiles, train_labels, val_smiles, val_labels, target,
                 model_name, gpu, batch_size=16, max_epochs=10, learning_rate=3e-4):
 
-    global tokenizer
     tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
 
     train_ds = MoleculeDataset(train_smiles, train_labels, tokenizer)
     val_ds = MoleculeDataset(val_smiles, val_labels, tokenizer)
 
-    train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True, collate_fn=collate_fn)
-    val_loader = DataLoader(val_ds, batch_size=batch_size, collate_fn=collate_fn)
+    collate_fn = make_collate_fn(tokenizer.pad_token_id)
 
-    model = PeptideModel(model_name=model_name,
-                         learning_rate=learning_rate,
-                         target=target,
-                         tokenizer=tokenizer)
+    # VERY IMPORTANT: keep num_workers low on this janky box
+    train_loader = DataLoader(
+        train_ds,
+        batch_size=batch_size,
+        shuffle=True,
+        collate_fn=collate_fn,
+        num_workers=0,
+        pin_memory=True,
+    )
+
+    val_loader = DataLoader(
+        val_ds,
+        batch_size=64,
+        collate_fn=collate_fn,
+        num_workers=0,
+        pin_memory=True,
+    )
+
+    model = PeptideModel(
+        model_name=model_name,
+        learning_rate=learning_rate,
+        target=target,
+        tokenizer=tokenizer,
+    )
 
     checkpoint_cb = ModelCheckpoint(
         monitor="val_loss",
@@ -148,7 +188,7 @@ def train_model(train_smiles, train_labels, val_smiles, val_labels, target,
         max_epochs=max_epochs,
         accelerator="gpu",
         devices=[gpu],
-        val_check_interval=0.2,
+        val_check_interval=0.5,
         logger=CSVLogger("logs/", name=f"{dataset}_{model_name.split('/')[-1]}"),
         log_every_n_steps=10,
         callbacks=[checkpoint_cb, earlystop_cb],
@@ -156,13 +196,14 @@ def train_model(train_smiles, train_labels, val_smiles, val_labels, target,
 
     trainer.fit(model, train_loader, val_loader)
 
-    # Load the best version
     best_path = checkpoint_cb.best_model_path
-    model = PeptideModel.load_from_checkpoint(best_path,
-                                              model_name=model_name,
-                                              learning_rate=learning_rate,
-                                              target=target,
-                                              tokenizer=tokenizer)
+    model = PeptideModel.load_from_checkpoint(
+        best_path,
+        model_name=model_name,
+        learning_rate=learning_rate,
+        target=target,
+        tokenizer=tokenizer,
+    )
 
     return model
 
@@ -174,8 +215,11 @@ def train_model(train_smiles, train_labels, val_smiles, val_labels, target,
 def evaluate_on_test_set(model, test_smiles, test_labels, model_name, batch_size=64):
 
     tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
+
+    collate_fn = make_collate_fn(tokenizer.pad_token_id)
+
     test_ds = MoleculeDataset(test_smiles, test_labels, tokenizer)
-    test_loader = DataLoader(test_ds, batch_size=batch_size, collate_fn=collate_fn)
+    test_loader = DataLoader(test_ds, batch_size=batch_size, collate_fn=collate_fn, num_workers=0)
 
     model.eval()
     model.to("cuda")

@@ -19,7 +19,7 @@ MODELS=(
     "aaronfeller/PeptideMLM-MTR_lg"
 )
 
-GPUS=(0 1 2 3 4 5 6 7)
+GPUS=(0 1 2 3)
 
 TRAIN_SCRIPT="scripts/train_model.py"
 
@@ -36,9 +36,9 @@ get_gpu_free_mem() {
         | sed -n "$((1 + $1))p"
 }
 
-# Return list of GPUs with >70GB free
+# Return list of GPUs with >80GB free
 find_free_gpus() {
-    local threshold=70000
+    local threshold=80000
     local free
     local candidates=()
 
@@ -59,8 +59,8 @@ find_free_gpus() {
 declare -a JOB_DATASETS
 declare -a JOB_MODELS
 
-for DATASET in "${DATASETS[@]}"; do
-    for MODEL in "${MODELS[@]}"; do
+for MODEL in "${MODELS[@]}"; do
+    for DATASET in "${DATASETS[@]}"; do
         
         # Skip already-completed AmpHGT runs
         if [[ "$DATASET" == "AmpHGT" && ("$MODEL" == *"_sm"* || "$MODEL" == *"_base"*) ]]; then
@@ -95,8 +95,8 @@ while (( JOB_ID < TOTAL_JOBS )); do
     FREE_GPUS=( $(find_free_gpus) )
 
     if (( ${#FREE_GPUS[@]} == 0 )); then
-        echo "[INFO] No GPUs with >70GB free — sleeping 60s..."
-        sleep 60
+        echo "[INFO] No GPUs with >80GB free — sleeping 120s..."
+        sleep 120
         continue
     fi
 
@@ -128,8 +128,8 @@ while (( JOB_ID < TOTAL_JOBS )); do
         sleep 2
     done
 
-    echo "[INFO] Sleeping 60s before next GPU scan..."
-    sleep 60
+    echo "[INFO] Sleeping 120s before next GPU scan..."
+    sleep 120
 done
 
 echo "========================================="
