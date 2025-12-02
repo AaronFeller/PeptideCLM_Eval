@@ -5,8 +5,8 @@ set -e
 # USER CONFIGURATION
 ###############################################
 
-# DATASETS=("AmpHGT" "CellPPD" "MHC" "THPep")
-DATASETS=("MHC")
+DATASETS=("AmpHGT" "MHC" "THPep")
+# DATASETS=("CellPPD")
 
 MODELS=(
     "aaronfeller/PeptideMTR_sm"
@@ -20,7 +20,7 @@ MODELS=(
     "aaronfeller/PeptideMLM-MTR_lg"
 )
 
-GPUS=(0 1 2 3)
+GPUS=(4 5 6)
 
 TRAIN_SCRIPT="scripts/train_model.py"
 
@@ -123,6 +123,8 @@ while (( JOB_ID < TOTAL_JOBS )); do
             --dataset "$DATASET" \
             --gpu 0 \
             --model_name "$MODEL" \
+            --batch_size 32 \
+            --save_path "results_bs32" \
             > "$LOG_FILE" 2>&1 &
 
         JOB_ID=$((JOB_ID + 1))

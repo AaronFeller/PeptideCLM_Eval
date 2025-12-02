@@ -138,7 +138,7 @@ class PeptideModel(pl.LightningModule):
 ###############################################
 
 def train_model(train_smiles, train_labels, val_smiles, val_labels, target,
-                model_name, gpu, batch_size=16, max_epochs=10, learning_rate=3e-4):
+                model_name, gpu, batch_size=None, max_epochs=10, learning_rate=3e-4):
 
     tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
 
@@ -154,7 +154,7 @@ def train_model(train_smiles, train_labels, val_smiles, val_labels, target,
         shuffle=True,
         collate_fn=collate_fn,
         num_workers=0,
-        pin_memory=True,
+        pin_memory=False,
     )
 
     val_loader = DataLoader(
@@ -162,7 +162,7 @@ def train_model(train_smiles, train_labels, val_smiles, val_labels, target,
         batch_size=64,
         collate_fn=collate_fn,
         num_workers=0,
-        pin_memory=True,
+        pin_memory=False,
     )
 
     model = PeptideModel(
@@ -187,9 +187,10 @@ def train_model(train_smiles, train_labels, val_smiles, val_labels, target,
     trainer = pl.Trainer(
         max_epochs=max_epochs,
         accelerator="gpu",
-        devices=[gpu],
+        devices=1,#[gpu],
+        strategy="single_device",
         val_check_interval=0.5,
-        logger=CSVLogger("logs/", name=f"{dataset}_{model_name.split('/')[-1]}"),
+        logger=CSVLogger(f"logs/{save_path}", name=f"{dataset}_{model_name.split('/')[-1]}"),
         log_every_n_steps=10,
         callbacks=[checkpoint_cb, earlystop_cb],
     )
@@ -212,7 +213,7 @@ def train_model(train_smiles, train_labels, val_smiles, val_labels, target,
 # TEST / INFERENCE
 ###############################################
 
-def evaluate_on_test_set(model, test_smiles, test_labels, model_name, batch_size=64):
+def evaluate_on_test_set(model, test_smiles, test_labels, model_name, batch_size=None):
 
     tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
 
@@ -258,11 +259,15 @@ if __name__ == "__main__":
     parser.add_argument("--dataset", required=True)
     parser.add_argument("--gpu", type=int, required=True)
     parser.add_argument("--model_name", required=True)
+    parser.add_argument("--batch_size", type=int, default=16)
+    parser.add_argument("--save_path", type=str, required=True)
     args = parser.parse_args()
 
     dataset = args.dataset
     gpu = args.gpu
     model_name = args.model_name
+    batch_size = args.batch_size
+    save_path = args.save_path
 
     train_df = pd.read_csv(f"data/{dataset}_train.csv")
     val_path = f"data/{dataset}_val.csv"
@@ -280,9 +285,9 @@ if __name__ == "__main__":
     if val_df is not None and test_df is not None:
         model = train_model(train_df["smiles"], train_df["label"],
                             val_df["smiles"], val_df["label"],
-                            task, model_name, gpu)
+                            task, model_name, gpu, batch_size=batch_size)
 
-        preds = evaluate_on_test_set(model, test_df["smiles"], test_df["label"], model_name)
+        preds = evaluate_on_test_set(model, test_df["smiles"], test_df["label"], model_name, batch_size=64)
 
         out = pd.DataFrame({
             "smiles": test_df["smiles"],
@@ -290,8 +295,8 @@ if __name__ == "__main__":
             "predicted_label": preds,
         })
 
-        os.makedirs("results2", exist_ok=True)
-        out.to_csv(f"results2/{dataset}_{model_name.split('/')[-1]}_results.csv", index=False)
+        os.makedirs(save_path, exist_ok=True)
+        out.to_csv(f"{save_path}/{dataset}_{model_name.split('/')[-1]}_results.csv", index=False)
 
     else:
         # fallback to 5-fold CV
@@ -305,10 +310,10 @@ if __name__ == "__main__":
 
             model = train_model(tr["smiles"], tr["label"],
                                 va["smiles"], va["label"],
-                                task, model_name, gpu)
+                                task, model_name, gpu, batch_size=batch_size)
 
             if test_df is not None:
-                preds = evaluate_on_test_set(model, test_df["smiles"], test_df["label"], model_name)
+                preds = evaluate_on_test_set(model, test_df["smiles"], test_df["label"], model_name, batch_size=64)
 
                 df = pd.DataFrame({
                     "smiles": test_df["smiles"],
@@ -320,7 +325,7 @@ if __name__ == "__main__":
                 continue
             elif test_df is None:
                 # evaluate on created val set
-                preds = evaluate_on_test_set(model, va["smiles"], va["label"], model_name)
+                preds = evaluate_on_test_set(model, va["smiles"], va["label"], model_name, batch_size=64)
 
             df = pd.DataFrame({
                 "smiles": va["smiles"],
@@ -331,6 +336,5 @@ if __name__ == "__main__":
             all_results.append(df)
 
         final = pd.concat(all_results)
-        os.makedirs("results2", exist_ok=True)
-        final.to_csv(f"results2/{dataset}_{model_name.split('/')[-1]}_results.csv", index=False)
-
+        os.makedirs(save_path, exist_ok=True)
+        final.to_csv(f"{save_path}/{dataset}_{model_name.split('/')[-1]}_results.csv", index=False)
